@@ -19,7 +19,10 @@
 
 import os
 
+os.environ["OMP_NUM_THREADS"] = "1"
+import torch
 import pytorch_lightning as pl
+import torch.nn
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.plugins import DDPPlugin
@@ -29,6 +32,8 @@ import options
 from experiment_modules.depth_model import DepthModel
 from utils.generic_utils import copy_code_state
 from utils.dataset_utils import get_dataset
+import torchvision.transforms as transforms
+import albumentations as AL
 
 
 def main(opts):
@@ -47,6 +52,9 @@ def main(opts):
         # load model using read options
         model = DepthModel(opts)
 
+
+
+
     # load dataset and dataloaders
     dataset_class, _ = get_dataset(opts.dataset, 
                         opts.dataset_scan_split_file, opts.single_debug_scan_id)
@@ -60,6 +68,8 @@ def main(opts):
                         image_width=opts.image_width,
                         image_height=opts.image_height,
                         shuffle_tuple=opts.shuffle_tuple,
+                        pass_frame_id=True,
+                        opts=opts
                     )
 
     train_dataloader = DataLoader(
@@ -81,6 +91,8 @@ def main(opts):
                         image_width=opts.image_width,
                         image_height=opts.image_height,
                         include_full_res_depth=opts.high_res_validation,
+                        pass_frame_id=True,
+                        opts=opts
                     )
 
     val_dataloader = DataLoader(
@@ -98,10 +110,14 @@ def main(opts):
 
     # This will copy a snapshot of the code (minus whatever is in .gitignore) 
     # into a folder inside the main log directory.
-    copy_code_state(path=os.path.join(logger.log_dir, "code"))
+    # copy_code_state(path=os.path.join(logger.log_dir, "code"))
 
     # dumping a copy of the config to the directory for easy(ier) 
     # reproducibility.
+    if not os.path.exists(logger.log_dir):
+        os.makedirs(logger.log_dir, exist_ok=True)
+
+
     options.OptionsHandler.save_options_as_yaml(
                                     os.path.join(logger.log_dir, "config.yaml"),
                                     opts,
@@ -115,14 +131,17 @@ def main(opts):
                                 monitor='val/loss',
                                 mode='min',
                             )
-
     
     # keep track of changes in learning rate
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
     # allowing the lightning DDPPlugin to ignore unused params.
     find_unused_parameters = (opts.matching_encoder_type == "unet_encoder")
-    
+
+    # from pytorch_lightning.profiler import PyTorchProfiler
+
+    # Set up the profiler
+
     trainer = pl.Trainer(
                         gpus=opts.gpus,
                         log_every_n_steps=opts.log_interval,
@@ -132,8 +151,8 @@ def main(opts):
                         precision=opts.precision,
                         benchmark=True,
                         logger=logger,
-                        sync_batchnorm=False,
-                        callbacks=[checkpoint_callback, lr_monitor],
+                        sync_batchnorm=False, #notice that this may be changed
+                        callbacks=[checkpoint_callback, lr_monitor] if not opts.name=='debug' else [lr_monitor],
                         num_sanity_val_steps=opts.num_sanity_val_steps,
                         strategy=DDPPlugin(
                             find_unused_parameters=find_unused_parameters
@@ -142,7 +161,7 @@ def main(opts):
                     )
 
     # start training
-    trainer.fit(model, train_dataloader, val_dataloader)
+    trainer.fit(model, train_dataloader,val_dataloader)
 
 
 if __name__ == '__main__':
@@ -153,6 +172,12 @@ if __name__ == '__main__':
     print("\n")
     opts = option_handler.options
 
+    opts.val_batches = 400
+    opts.val_interval = 2000
+    opts.val_batch_size = 2
+    opts.log_interval = 2000
+    # opts.max_steps=10
+    assert opts.name == option_handler.config_filepaths[0].split('/')[-1].split('.')[0]
     # if no GPUs are available for us then, use the 32 bit on CPU
     if opts.gpus == 0:
         print("Setting precision to 32 bits since --gpus is set to 0.")

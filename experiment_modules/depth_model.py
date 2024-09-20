@@ -28,7 +28,7 @@ class DepthModel(pl.LightningModule):
         It houses experiments for a vanilla cost volume that uses dot product
         reduction and the full feature volume.
 
-        It also allows for experimentation on the type of image encoder.
+        I7ype of image encoder.
 
         The opts the model is first initialized with will be saved as part of 
         hparams. On load from checkpoint the model will use those stores 
@@ -107,11 +107,24 @@ class DepthModel(pl.LightningModule):
 
         # iniitalize the encoder for strong image priors
         if "efficientnet" in self.run_opts.image_encoder_name:
-            self.encoder = timm.create_model(
-                                            "tf_efficientnetv2_s_in21ft1k", 
-                                            pretrained=True, 
-                                            features_only=True
-                                        )
+            # self.encoder = timm.create_model(
+            #                                 "tf_efficientnetv2_s_in21ft1k",
+            #                                 pretrained=True,
+            #                                 features_only=True)
+            #
+            # self.encoder = timm.create_model(
+            #                                 "tf_efficientnetv2_s_in21ft1k",
+            #                                 pretrained=False,
+            #                                 features_only=True,
+            #                                 checkpoint_path="/data/laiyan/codes/simplerecon/tf_efficientnetv2_s_21ft1k-d7dafa41.pth",
+            #                                 strict=False
+            #                             )
+            self.encoder = timm.create_model('tf_efficientnetv2_s_in21ft1k', pretrained=False,features_only=True)
+            # Load state dictionary with strict=False
+            state_dict = torch.load("/data/laiyan/codes/simplerecon/tf_efficientnetv2_s_21ft1k-d7dafa41.pth")
+            self.encoder.load_state_dict(state_dict, strict=False)
+
+            # self.encoder = timm.create_model("hf_hub:timm/tf_efficientnetv2_s.in21k_ft_in1k", pretrained=True)
 
             self.encoder.num_ch_enc = self.encoder.feature_info.channels()
         else:
@@ -468,7 +481,7 @@ class DepthModel(pl.LightningModule):
         si_loss = self.si_loss(log_depth_gt[mask_b], log_depth_pred[mask_b])
 
         mask_b_limit = torch.logical_and(mask_b, depth_pred > 0.1)
-        inv_abs_loss = self.abs_loss(1 / depth_gt[mask_b_limit], 
+        inv_abs_loss = self.abs_loss(1 / depth_gt[mask_b_limit],
                                     1 / depth_pred[mask_b_limit])
 
         log_l1_loss = self.abs_loss(log_depth_gt[mask_b], log_depth_pred[mask_b])
@@ -542,14 +555,14 @@ class DepthModel(pl.LightningModule):
             # log images for train.
             if (is_train and 
                         self.global_step % self.trainer.log_every_n_steps == 0):
-                for i in range(4):
+                for i in range(min(normals_pred.shape[0],4)):
                     mask_i = mask[i].float().cpu()
                     depth_gt_viz_i, vmin, vmax = colormap_image(depth_gt[i].float().cpu(), mask_i, return_vminvmax=True)
                     depth_pred_viz_i = colormap_image(depth_pred[i].float().cpu(), vmin=vmin, vmax=vmax)
                     cv_min_viz_i = colormap_image(cv_min[i].unsqueeze(0).float().cpu(), vmin=vmin, vmax=vmax)
                     depth_pred_lr_viz_i = colormap_image(depth_pred_lr[i].float().cpu(), vmin=vmin, vmax=vmax)
 
-                    image_i = reverse_imagenet_normalize(cur_data["image_b3hw"][i]) 
+                    image_i = reverse_imagenet_normalize(cur_data["image_b3hw"][i].cpu())
 
                     self.logger.experiment.add_image(f'image/{i}', image_i, self.global_step)
                     self.logger.experiment.add_image(f'depth_gt/{i}', depth_gt_viz_i, self.global_step)
@@ -565,7 +578,7 @@ class DepthModel(pl.LightningModule):
             for loss_name, loss_val in losses.items():
                 self.log(f'{phase}/{loss_name}', 
                         loss_val, 
-                        sync_dist=True, 
+                        sync_dist=True,
                         on_step=is_train, 
                         on_epoch=not is_train)
 
@@ -598,7 +611,7 @@ class DepthModel(pl.LightningModule):
             for metric_name, metric_val in metrics.items():
                 self.log(f'{phase}_metrics/{metric_name}', 
                             metric_val, 
-                            sync_dist=True, 
+                            sync_dist=True,
                             on_step=is_train, 
                             on_epoch=not is_train)
 

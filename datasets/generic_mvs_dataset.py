@@ -9,7 +9,9 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from utils.generic_utils import (readlines, imagenet_normalize, read_image_file)
 from utils.geometry_utils import pose_distance
-
+import albumentations as A
+import torchvision.transforms.functional as TF
+import kornia
 logger = logging.getLogger(__name__)
 
 class GenericMVSDataset(Dataset):
@@ -63,7 +65,8 @@ class GenericMVSDataset(Dataset):
                 verbose_init=True,
                 native_depth_width=640,
                 native_depth_height=480,
-                image_resampling_mode=pil.BILINEAR
+                image_resampling_mode=pil.BILINEAR,
+                opts=None
             ):
         """
         Args:
@@ -193,6 +196,14 @@ class GenericMVSDataset(Dataset):
 
         self.disable_resize_warning = False
         self.image_resampling_mode=image_resampling_mode
+
+        self.opts = opts
+        if self.opts.jitter_type==0:
+            pass
+        elif self.opts.jitter_type==1:
+            self.color_transform = lambda x: x
+        elif self.opts.jitter_type==2 or self.opts.jitter_type==3:
+            self.color_transform = A.ColorJitter(0.2, 0.2, 0.2, 0.2,p=1.0)
 
     def __len__(self):
         return len(self.frame_tuples)
@@ -399,7 +410,7 @@ class GenericMVSDataset(Dataset):
         """
         raise NotImplementedError()
 
-    def load_color(self, scan_id, frame_id):
+    def load_color(self, scan_id, frame_id,return_numpy=False):
         """ Loads a frame's RGB file, resizes it to configured RGB size.
 
             Args: 
@@ -418,6 +429,7 @@ class GenericMVSDataset(Dataset):
                             height=self.image_height, width=self.image_width,
                             resampling_mode=self.image_resampling_mode,
                             disable_warning=self.disable_resize_warning,
+                            return_numpy=return_numpy
                         )
 
         return image
@@ -512,11 +524,27 @@ class GenericMVSDataset(Dataset):
             cam_T_world = np.linalg.inv(world_T_cam)
 
         # Load image
-        image = self.load_color(scan_id, frame_id)
+        return_numpy = True if (self.opts.jitter_type==2 or self.opts.jitter_type==3) and self.split=='train' else False
+        image = self.load_color(scan_id, frame_id,return_numpy=return_numpy)
 
         # Augment images
         if self.split == "train":
-            image = self.color_transform(image)
+            if self.opts.jitter_type==0:
+                image = self.color_transform(image)
+            elif self.opts.jitter_type==1:
+                image = image
+            elif self.opts.jitter_type==2:
+                image = self.color_transform(image=image)['image']
+                image = TF.to_tensor(image).float()
+            elif self.opts.jitter_type==3:
+                if self.jitter_params is None:
+                    jitter_params = self.color_transform.get_params()
+                    self.jitter_params = jitter_params
+                else:
+                    jitter_params = self.jitter_params
+                image = self.color_transform.apply(image, **jitter_params)
+                image = TF.to_tensor(image).float()
+
 
         if flip:
             image = torch.flip(image, (-1,))
@@ -629,10 +657,13 @@ class GenericMVSDataset(Dataset):
             frame_ids = frame_ids[:self.num_images_in_tuple]
 
         # assemble the dataset element by getting all data for each frame
+        if self.opts.jitter_type==3:
+            self.jitter_params=None
         inputs = []
         for _, frame_id in enumerate(frame_ids):
             inputs += [self.get_frame(scan_id, frame_id, load_depth=True, flip=flip)]
-        
+
+
         # cur_data is the reference frame
         cur_data, *src_data_list = inputs
         # src_data contains data for all source frames

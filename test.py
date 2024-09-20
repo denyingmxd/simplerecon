@@ -110,6 +110,7 @@
 
 import os
 from pathlib import Path
+import numpy
 
 import torch
 import torch.nn.functional as F
@@ -121,19 +122,17 @@ from tools import fusers_helper
 from utils.dataset_utils import get_dataset
 from utils.generic_utils import to_gpu, cache_model_outputs
 from utils.metrics_utils import ResultsAverager, compute_depth_metrics_batched
-from utils.visualization_utils import quick_viz_export
+from utils.visualization_utils import quick_viz_export, quick_viz_export_my
 
 import modules.cost_volume as cost_volume
 
 def main(opts):
 
     # get dataset
-    dataset_class, scans = get_dataset(opts.dataset, 
-                        opts.dataset_scan_split_file, opts.single_debug_scan_id)
+    dataset_class, scans = get_dataset(opts.dataset,  opts.dataset_scan_split_file, opts.single_debug_scan_id)
  
     # path where results for this model, dataset, and tuple type are.
-    results_path = os.path.join(opts.output_base_path, opts.name, 
-                                        opts.dataset, opts.frame_tuple_type)
+    results_path = os.path.join(opts.output_base_path, opts.name, opts.dataset, opts.frame_tuple_type)
 
     # set up directories for fusion
     if opts.run_fusion:
@@ -190,9 +189,11 @@ def main(opts):
     # used when training, saved internally as part of hparams in the checkpoint.
     # You can change this at inference by passing in 'opts=opts,' but there 
     # be dragons if you're not careful.
+
     model = DepthModel.load_from_checkpoint(
                                 opts.load_weights_from_checkpoint,
-                                args=None)
+                                args=None,)
+    # 11 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model) #be careful with this
     if (opts.fast_cost_volume and  
             isinstance(model.cost_volume, cost_volume.FeatureVolumeManager)):
         model.cost_volume = model.cost_volume.to_fast()
@@ -238,6 +239,7 @@ def main(opts):
                         image_width=opts.image_width,
                         image_height=opts.image_height,
                         pass_frame_id=True,
+                        opts=opts
                     )
 
             dataloader = torch.utils.data.DataLoader(
@@ -284,7 +286,7 @@ def main(opts):
                                 size=(depth_gt.shape[-2], depth_gt.shape[-1]),
                                 mode="nearest",
                             )
-
+                outputs['upampled_depth_pred_b1hw'] = upsampled_depth_pred_b1hw
                 # inf max depth matches DVMVS metrics, using minimum of 0.5m
                 valid_mask_b = (cur_data["full_res_depth_b1hw"] > 0.5)
 
@@ -378,7 +380,7 @@ def main(opts):
                     output_path = os.path.join(viz_output_dir, scan)
                     Path(output_path).mkdir(parents=True, exist_ok=True)
 
-                    quick_viz_export(
+                    quick_viz_export_my(
                                 output_path,
                                 outputs, 
                                 cur_data,

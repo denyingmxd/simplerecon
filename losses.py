@@ -152,7 +152,8 @@ class MVDepthLoss(nn.Module):
                                                         cur_world_T_cam_b44,
                                                         src_cam_T_world_b44,
                                                     )
-
+        if valid_mask_b1hw.sum()==0:
+            return torch.tensor(0.0, device=depth_pred_b1hw.device)
         pred_cam_points_b4N = self.backproject(depth_pred_b1hw, cur_invK_b44)
         pred_world_points_b4N = cur_world_T_cam_b44 @ pred_cam_points_b4N
 
@@ -192,6 +193,7 @@ class MVDepthLoss(nn.Module):
         num_src_frames = src_depth_bk1hw.shape[1]
 
         loss = 0
+        valids = 0
         for src_depth_b1hw, src_K_b44, src_cam_T_world_b44 in zip(*src_to_iterate):
 
             error = self.get_error_for_pair(
@@ -205,4 +207,7 @@ class MVDepthLoss(nn.Module):
                                     )
             loss += error
 
-        return loss / num_src_frames
+            if error > 0:
+                valids += 1
+
+        return loss / valids

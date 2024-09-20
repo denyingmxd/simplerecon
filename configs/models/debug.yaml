@@ -1,0 +1,20 @@
+!!python/object:options.Options
+feature_volume_type: simple_cost_volume
+cost_volume_aggregation: dot
+cv_encoder_type: multi_scale_encoder
+depth_decoder_name: unet_pp
+image_encoder_name: efficientnet
+log_interval: 100
+loss_type: log_l1
+lr: 0.0001
+wd: 0.0001
+matching_encoder_type: resnet
+num_sanity_val_steps: 0
+precision: 16
+random_seed: 0
+name: debug
+batch_size: 1
+gpus: 1
+num_workers: 1
+log_dir: logs
+jitter_type: 3

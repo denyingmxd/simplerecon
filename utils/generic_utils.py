@@ -8,7 +8,7 @@ import torch
 import torchvision.transforms.functional as TF
 from PIL import Image
 from torch import nn
-
+import numpy as np
 logger = logging.getLogger(__name__)
 
 
@@ -150,6 +150,8 @@ def imagenet_normalize(image):
         mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
     return image
 
+
+
 def reverse_imagenet_normalize(image):
     """ Reverses ImageNet normalization in an input image. """
 
@@ -165,7 +167,8 @@ def read_image_file(filepath,
                     value_scale_factor=1.0, 
                     resampling_mode=Image.BILINEAR,
                     disable_warning=False,
-                    target_aspect_ratio=None):
+                    target_aspect_ratio=None,
+                    return_numpy=False):
     """" Reads an image file using PIL, then optionally resizes the image,
     with selective resampling, scales values, and returns the image as a 
     tensor
@@ -202,8 +205,10 @@ def read_image_file(filepath,
                     f"dimension larger than input size ({img_width}, "
                     f"{img_height}).")
             img = img.resize((width, height), resample=resampling_mode)
-
-    img = TF.to_tensor(img).float() * value_scale_factor
+    if return_numpy:
+        img = np.array(img)
+    else:
+        img = TF.to_tensor(img).float() * value_scale_factor
     
     return img
 
@@ -280,3 +285,5 @@ def cache_model_outputs(
 
         with open(elem_filepath, 'wb') as handle:
             pickle.dump(elem_output_dict, handle)
+
+

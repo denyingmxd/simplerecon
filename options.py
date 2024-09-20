@@ -215,6 +215,9 @@ class Options():
     # an alpha to a culled-back-faces render.
     back_face_alpha: float = 0.5
 
+    #some of my addtionaly params
+    jitter_type: int = 0
+
 
 
 class OptionsHandler():
@@ -312,11 +315,16 @@ class OptionsHandler():
                 self.config_filepaths.append(cl_args.config_file)
 
             # then merge from a data config
+
+
+
             if cl_args.data_config_file is not None:
                 config_options = OptionsHandler.load_options_from_yaml(
                                                     cl_args.data_config_file)
                 self.merge_config_options(config_options)
                 self.config_filepaths.append(cl_args.data_config_file)
+
+
         else:
             # no config has been supplied. Let's hope that we have required
             # arguments through command line.

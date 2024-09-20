@@ -7,8 +7,8 @@ import torch
 from PIL import Image
 
 from utils.generic_utils import reverse_imagenet_normalize
-
-
+import time
+import torch.nn.functional as F
 def colormap_image(
                 image_1hw,
                 mask_1hw=None, 
@@ -165,3 +165,113 @@ def quick_viz_export(
                                     ).cpu().detach().numpy() * 255)
                         )
         pil_image.save(os.path.join(output_path, f"{frame_id}_color.png"))
+
+
+def quick_viz_export_my(
+        output_path,
+        outputs,
+        cur_data,
+        batch_ind,
+        valid_mask_b,
+        batch_size):
+    """ Helper function for quickly exporting depth maps during inference. """
+
+    if valid_mask_b.sum() == 0:
+        batch_vmin = 0.0
+        batch_vmax = 5.0
+    else:
+        batch_vmin = cur_data["full_res_depth_b1hw"][valid_mask_b].min()
+        batch_vmax = cur_data["full_res_depth_b1hw"][valid_mask_b].max()
+
+    if batch_vmax == batch_vmin:
+        batch_vmin = 0.0
+        batch_vmax = 5.0
+
+    for elem_ind in range(outputs["depth_pred_s0_b1hw"].shape[0]):
+        if "frame_id_string" in cur_data:
+            frame_id = cur_data["frame_id_string"][elem_ind]
+        else:
+            frame_id = (batch_ind * batch_size) + elem_ind
+            frame_id = f"{str(frame_id):6d}"
+
+        # check for valid depths from dataloader
+        if valid_mask_b[elem_ind].sum() == 0:
+            sample_vmin = 0.0
+            sample_vmax = 0.0
+        else:
+            # these will be the same when the depth map is all ones.
+            sample_vmin = cur_data["full_res_depth_b1hw"][elem_ind][valid_mask_b[elem_ind]].min()
+            sample_vmax = cur_data["full_res_depth_b1hw"][elem_ind][valid_mask_b[elem_ind]].max()
+
+        # if no meaningful gt depth in dataloader, don't viz gt and
+        # set vmin/max to default
+        quality = 75
+        if sample_vmax != sample_vmin:
+            full_res_depth_1hw = cur_data["full_res_depth_b1hw"][elem_ind]
+            full_res_depth_1hw = torch.nan_to_num(full_res_depth_1hw,0)
+            full_res_depth_3hw = colormap_image(
+                full_res_depth_1hw,
+                vmin=batch_vmin, vmax=batch_vmax,
+                mask_1hw=(valid_mask_b[elem_ind] * (~torch.isnan(cur_data["full_res_depth_b1hw"][elem_ind]))).float()
+            )
+
+            full_res_depth_hw3 = np.uint8(
+                full_res_depth_3hw.permute(1, 2, 0
+                                           ).cpu().detach().numpy() * 255
+            )
+
+            Image.fromarray(full_res_depth_hw3).save(
+                os.path.join(output_path,
+                             f"{frame_id}_gt_depth.jpg"),quality=quality
+            )
+
+        upsampled_cost_3hw = F.interpolate(
+                                outputs["lowest_cost_bhw"][elem_ind].unsqueeze(0).unsqueeze(0),
+                                size=(full_res_depth_hw3.shape[0], full_res_depth_hw3.shape[1]),
+                                mode="nearest",
+                            )[0]
+
+        lowest_cost_3hw = colormap_image(
+            upsampled_cost_3hw,
+            vmin=batch_vmin, vmax=batch_vmax
+        )
+        pil_image = Image.fromarray(
+            np.uint8(lowest_cost_3hw.permute(1, 2, 0).cpu().detach().numpy() * 255)
+        )
+        pil_image.save(os.path.join(output_path, f"{frame_id}_lowest_cost_pred.jpg"),quality=quality)
+
+        depth_3hw = colormap_image(
+            outputs["upampled_depth_pred_b1hw"][elem_ind],
+            vmin=batch_vmin, vmax=batch_vmax)
+        pil_image = Image.fromarray(
+            np.uint8(depth_3hw.permute(1, 2, 0
+                                       ).cpu().detach().numpy() * 255)
+        )
+
+        pil_image.save(os.path.join(output_path, f"{frame_id}_pred_depth.jpg"), optimize=True,quality=quality)
+
+        main_color_3hw = cur_data["high_res_color_b3hw"][elem_ind]
+        main_color_3hw = reverse_imagenet_normalize(main_color_3hw)
+        pil_image = Image.fromarray(
+            np.uint8(main_color_3hw.permute(1, 2, 0
+                                            ).cpu().detach().numpy() * 255)
+        )
+        pil_image.save(os.path.join(output_path, f"{frame_id}_color.jpg"), quality=quality)
+
+        error_map = torch.abs( (torch.abs(outputs["upampled_depth_pred_b1hw"][elem_ind] - cur_data["full_res_depth_b1hw"][elem_ind])) /
+                               cur_data["full_res_depth_b1hw"][elem_ind])
+        error_map = error_map * valid_mask_b[elem_ind] * (~torch.isnan(cur_data["full_res_depth_b1hw"][elem_ind])).float()
+        error_map = torch.nan_to_num(error_map, 0)
+        error_map_3hw = colormap_image(
+            error_map,
+            vmin=0, vmax=0.1,
+            colormap="jet",
+            flip=False,
+            mask_1hw = (valid_mask_b[elem_ind] * (~torch.isnan(cur_data["full_res_depth_b1hw"][elem_ind]))).float()
+        )
+        pil_image = Image.fromarray(
+            np.uint8(error_map_3hw.permute(1, 2, 0
+                                           ).cpu().detach().numpy() * 255)
+        )
+        pil_image.save(os.path.join(output_path, f"{frame_id}_error_map.jpg"), quality=quality)
+

@@ -3,6 +3,7 @@ channels:
   - default
   - pytorch
   - conda-forge
+  -
 dependencies:
   - clang=15.0.7
   - llvm-openmp=15.0.7

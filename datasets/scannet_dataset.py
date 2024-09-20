@@ -98,6 +98,7 @@ class ScannetDataset(GenericMVSDataset):
             verbose_init=True,
             min_valid_depth=1e-3,
             max_valid_depth=10,
+            opts=None
         ):
         super().__init__(
                 dataset_path=dataset_path,
@@ -114,7 +115,7 @@ class ScannetDataset(GenericMVSDataset):
                 include_full_depth_K=include_full_depth_K, 
                 include_high_res_color=include_high_res_color, 
                 pass_frame_id=pass_frame_id, skip_frames=skip_frames, 
-                skip_to_frame=skip_to_frame, verbose_init=verbose_init,
+                skip_to_frame=skip_to_frame, verbose_init=verbose_init,opts=opts
             )
 
         """
@@ -217,7 +218,7 @@ class ScannetDataset(GenericMVSDataset):
                 valid_frames = f.readlines()
         else:
             # find out which frames have valid poses 
-
+            print('1, no cache')
             #get scannet directories
             scan_dir = os.path.join(self.dataset_path, 
                             self.get_sub_folder_dir(split), scan)
@@ -323,7 +324,7 @@ class ScannetDataset(GenericMVSDataset):
         # check if we have cached resized images on disk first
         if os.path.exists(cached_resized_path):
             return cached_resized_path
-        
+        print('4, no cache')
         # instead return the default image
         return os.path.join(sensor_data_dir, f"frame-{frame_id}.color.jpg")
 
@@ -346,13 +347,13 @@ class ScannetDataset(GenericMVSDataset):
         sensor_data_dir = os.path.join(scene_path, "sensor_data")
 
         cached_resized_path = os.path.join(sensor_data_dir, 
-                f"frame-{frame_id}.color.{self.high_res_image_height}.png")
+                f"frame-{frame_id}.color.{self.high_res_image_width}.png")#notice we change to with instead of original hieght
         # check if we have cached resized images on disk first
         if os.path.exists(cached_resized_path):
             return cached_resized_path
-        
+        print('3, no cache')
         # instead return the default image
-        return os.path.join(sensor_data_dir, f"frame-{frame_id}.color.jpg")
+        return os.path.join(sensor_data_dir, f"frame-{frame_id}.color.png")
 
     def get_cached_depth_filepath(self, scan_id, frame_id):
         """ returns the filepath for a frame's depth file at the dataset's 
@@ -494,7 +495,7 @@ class ScannetDataset(GenericMVSDataset):
 
         if not os.path.exists(depth_filepath):
             depth_filepath = self.get_full_res_depth_filepath(scan_id, frame_id)
-
+            print('2, no cache')
         # Load depth, resize
         depth = read_image_file(
                                 depth_filepath,

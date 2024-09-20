@@ -72,10 +72,6 @@ def get_dataset(dataset_name,
 
         if single_debug_scan_id is not None:
             scans = [single_debug_scan_id]
-
-
-        if single_debug_scan_id is not None:
-            scans = [single_debug_scan_id]
         
         dataset_class = VDRDataset
 
