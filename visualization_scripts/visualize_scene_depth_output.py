@@ -143,7 +143,7 @@ def main(opts):
                 main_color_3hw = F.interpolate(
                                     cur_data["high_res_color_b3hw"].cuda(), 
                                     size=(large_format_size[0],
-                                                        large_format_size[1]), 
+                                                        large_format_size[1]),
                                     mode="bilinear", 
                                     align_corners=False,
                                 )[0]
@@ -324,6 +324,7 @@ def main(opts):
                                 os.path.join(viz_output_dir, f"{scan}.mp4"),
                                 fps=fps,
                             )
+            # exit()
 
 if __name__ == '__main__':
     # don't need grad for test.

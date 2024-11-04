@@ -18,3 +18,4 @@ gpus: 4
 num_workers: 4
 log_dir: logs
 jitter_type: 2
+model_type: org

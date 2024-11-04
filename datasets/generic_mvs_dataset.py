@@ -198,12 +198,13 @@ class GenericMVSDataset(Dataset):
         self.image_resampling_mode=image_resampling_mode
 
         self.opts = opts
-        if self.opts.jitter_type==0:
-            pass
-        elif self.opts.jitter_type==1:
-            self.color_transform = lambda x: x
-        elif self.opts.jitter_type==2 or self.opts.jitter_type==3:
-            self.color_transform = A.ColorJitter(0.2, 0.2, 0.2, 0.2,p=1.0)
+        if hasattr(self,'opts') and hasattr(self.opts,'jitter_type'):
+            if self.opts.jitter_type==0:
+                pass
+            elif self.opts.jitter_type==1:
+                self.color_transform = lambda x: x
+            elif self.opts.jitter_type==2 or self.opts.jitter_type==3:
+                self.color_transform = A.ColorJitter(0.2, 0.2, 0.2, 0.2,p=1.0)
 
     def __len__(self):
         return len(self.frame_tuples)
@@ -524,12 +525,12 @@ class GenericMVSDataset(Dataset):
             cam_T_world = np.linalg.inv(world_T_cam)
 
         # Load image
-        return_numpy = True if (self.opts.jitter_type==2 or self.opts.jitter_type==3) and self.split=='train' else False
+        return_numpy = True if hasattr(self.opts,'jitter_type') and (self.opts.jitter_type==2 or self.opts.jitter_type==3) and self.split=='train' else False
         image = self.load_color(scan_id, frame_id,return_numpy=return_numpy)
 
         # Augment images
         if self.split == "train":
-            if self.opts.jitter_type==0:
+            if self.opts.jitter_type==0 or (not hasattr(self.opts,'jitter_type')):
                 image = self.color_transform(image)
             elif self.opts.jitter_type==1:
                 image = image
@@ -640,7 +641,7 @@ class GenericMVSDataset(Dataset):
 
         flip_threshold = 0.5 if self.split == "train" else 0.0
         flip = torch.rand(1).item() < flip_threshold
-        
+        # flip=False
         # get the index of the tuple 
         scan_id, *frame_ids = self.frame_tuples[idx].split(" ")
 
@@ -657,7 +658,7 @@ class GenericMVSDataset(Dataset):
             frame_ids = frame_ids[:self.num_images_in_tuple]
 
         # assemble the dataset element by getting all data for each frame
-        if self.opts.jitter_type==3:
+        if hasattr(self.opts,'jitter_type') and self.opts.jitter_type==3 and self.split=='train':
             self.jitter_params=None
         inputs = []
         for _, frame_id in enumerate(frame_ids):
@@ -688,5 +689,7 @@ class GenericMVSDataset(Dataset):
 
             # stack again
             src_data = self.stack_src_data(src_data_list)
+
+        # cur_data['sparse_depth'] = np.load(os.path.join('/data/laiyan/datasets/ScanNet/sparse_depth_multi','scans_test',scan_id,'sensor_data','frame-{}.sparse_depth_multi.256.npz'.format(cur_data['frame_id_string'])))['arr_0'][None,:]
 
         return cur_data, src_data

@@ -27,10 +27,13 @@ class MSGradientLoss(nn.Module):
 
             mask_down_b = depth_gtn_grad.isfinite().all(dim=1, keepdim=True)
 
+            if mask_down_b.sum() == 0:
+                continue
+
             depth_pred_grad = kornia.filters.spatial_gradient(
                                     depth_pred_down).masked_select(mask_down_b)
 
-            grad_error = torch.abs(depth_pred_grad - 
+            grad_error = torch.abs(depth_pred_grad -
                                     depth_gtn_grad.masked_select(mask_down_b))
             grad_loss += torch.mean(grad_error)
 
@@ -193,7 +196,7 @@ class MVDepthLoss(nn.Module):
         num_src_frames = src_depth_bk1hw.shape[1]
 
         loss = 0
-        valids = 0
+        valids = 1e-6
         for src_depth_b1hw, src_K_b44, src_cam_T_world_b44 in zip(*src_to_iterate):
 
             error = self.get_error_for_pair(

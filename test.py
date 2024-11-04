@@ -116,7 +116,8 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from experiment_modules.depth_model import DepthModel
+from experiment_modules import *
+
 import options
 from tools import fusers_helper
 from utils.dataset_utils import get_dataset
@@ -126,13 +127,46 @@ from utils.visualization_utils import quick_viz_export, quick_viz_export_my
 
 import modules.cost_volume as cost_volume
 
+
+def get_gt_scale(depth_gt,pred_depth):
+    scales = []
+    if depth_gt.shape != pred_depth.shape:
+        depth_gt = F.interpolate(depth_gt, size=(pred_depth.shape[-2], pred_depth.shape[-1]), mode='nearest')
+    for i in range(len(depth_gt)):
+        scale = torch.nanmedian(depth_gt[i] / (pred_depth[i]))
+        scales.append(scale)
+    return torch.tensor(scales).to(depth_gt.device)
+
+
+
+
+def get_sparse_scale(sparse_depth, pred_depth):
+    scales = []
+    # if sparse_depth.shape != pred_depth.shape:
+    #     sparse_depth = F.interpolate(sparse_depth, size=(pred_depth.shape[-2], pred_depth.shape[-1]), mode='nearest')
+    for i in range(len(sparse_depth)):
+        sparse_mask = sparse_depth[i] > 0
+        if sparse_mask.sum() == 0:
+            scales.append(1)
+            continue
+        scale = torch.nanmedian(sparse_depth[i][sparse_mask] / (pred_depth[i][sparse_mask]))
+        scales.append(scale)
+    return torch.tensor(scales).to(sparse_depth.device)
+
+
 def main(opts):
 
     # get dataset
     dataset_class, scans = get_dataset(opts.dataset,  opts.dataset_scan_split_file, opts.single_debug_scan_id)
  
     # path where results for this model, dataset, and tuple type are.
-    results_path = os.path.join(opts.output_base_path, opts.name, opts.dataset, opts.frame_tuple_type)
+    result_ext = ""
+    if opts.scale_type>0:
+        result_ext += "_scale{}".format(opts.scale_type)
+    if opts.num_images_in_tuple is not None:
+        result_ext += "_{}views".format(opts.num_images_in_tuple)
+
+    results_path = os.path.join(opts.output_base_path, opts.name, opts.dataset, opts.frame_tuple_type+result_ext)
 
     # set up directories for fusion
     if opts.run_fusion:
@@ -190,14 +224,23 @@ def main(opts):
     # You can change this at inference by passing in 'opts=opts,' but there 
     # be dragons if you're not careful.
 
-    model = DepthModel.load_from_checkpoint(
+
+    if opts.model_type == "org":
+        model_class = DepthModel
+    elif opts.model_type == "mono":
+        model_class = MonoDepthModel
+    elif opts.model_type == "depth_anything":
+        model_class = DepthAnythingModel
+
+
+    model = model_class.load_from_checkpoint(
                                 opts.load_weights_from_checkpoint,
                                 args=None,)
-    # 11 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model) #be careful with this
-    if (opts.fast_cost_volume and  
+
+    if (opts.fast_cost_volume and
             isinstance(model.cost_volume, cost_volume.FeatureVolumeManager)):
         model.cost_volume = model.cost_volume.to_fast()
-
+    # model = model_class(opts)
     model = model.cuda().eval()
 
     # setting up overall result averagers
@@ -214,7 +257,6 @@ def main(opts):
 
         # loop over scans
         for scan in tqdm(scans):
-            
             # initialize fuser if we need to fuse
             if opts.run_fusion:
                 fuser = fusers_helper.get_fuser(opts, scan)
@@ -227,7 +269,7 @@ def main(opts):
                         limit_to_scan_id=scan,
                         include_full_res_depth=True,
                         tuple_info_file_location=opts.tuple_info_file_location,
-                        num_images_in_tuple=None,
+                        num_images_in_tuple=opts.num_images_in_tuple,
                         shuffle_tuple=opts.shuffle_tuple,
                         include_high_res_color=(
                                         (opts.fuse_color and opts.run_fusion)
@@ -281,11 +323,23 @@ def main(opts):
 
                 elapsed_model_time = start_time.elapsed_time(end_time)
 
+                if opts.scale_type==0:
+                    pass
+                else:
+                    if opts.scale_type==1:
+                        scale =  get_gt_scale(depth_gt,outputs["depth_pred_s0_b1hw"])
+                    elif opts.scale_type==2:
+                        scale =  get_sparse_scale(cur_data['sparse_depth'],outputs["depth_pred_s0_b1hw"])
+                    scale = scale.view(-1, 1, 1, 1)
+                    outputs["depth_pred_s0_b1hw"] = outputs["depth_pred_s0_b1hw"] * scale
+
                 upsampled_depth_pred_b1hw = F.interpolate(
-                                outputs["depth_pred_s0_b1hw"], 
+                                outputs["depth_pred_s0_b1hw"],
                                 size=(depth_gt.shape[-2], depth_gt.shape[-1]),
                                 mode="nearest",
                             )
+
+
                 outputs['upampled_depth_pred_b1hw'] = upsampled_depth_pred_b1hw
                 # inf max depth matches DVMVS metrics, using minimum of 0.5m
                 valid_mask_b = (cur_data["full_res_depth_b1hw"] > 0.5)
@@ -293,6 +347,7 @@ def main(opts):
                 # Check if there any valid gt points in this sample
                 if (valid_mask_b).any():
                     # compute metrics
+
                     metrics_b_dict = compute_depth_metrics_batched(
                         depth_gt.flatten(start_dim=1).float(), 
                         upsampled_depth_pred_b1hw.flatten(start_dim=1).float(), 
@@ -370,7 +425,7 @@ def main(opts):
                     fuser.fuse_frames(
                                         upsampled_depth_pred_b1hw, 
                                         cur_data["K_full_depth_b44"], 
-                                        cur_data["cam_T_world_b44"], 
+                                        cur_data["cam_T_world_b44"],
                                         color_frame
                                 )
 
@@ -421,7 +476,7 @@ def main(opts):
             print("\nScene metrics:")
             scene_frame_metrics.print_sheets_friendly(include_metrics_names=True)
             scene_frame_metrics.output_json(
-                                os.path.join(scores_output_dir, 
+                                os.path.join(scores_output_dir,
                                     f"{scan.replace('/', '_')}_metrics.json")
                             )
             # print running metrics.
@@ -430,6 +485,7 @@ def main(opts):
                                                     include_metrics_names=False,
                                                     print_running_metrics=True,
                                                 )
+            # exit()
 
         # compute and print final average
         print("\nFinal metrics:")

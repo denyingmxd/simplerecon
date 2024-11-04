@@ -126,6 +126,36 @@ class CVEncoder(nn.Module):
             outputs.append(x)
         return outputs
 
+class CVEncoder_cost_only(nn.Module):
+    def __init__(self, num_ch_cv, num_ch_enc, num_ch_outs):
+        super().__init__()
+
+        self.convs = nn.ModuleDict()
+        self.num_ch_enc = []
+
+        self.num_blocks = len(num_ch_outs)
+
+        for i in range(self.num_blocks):
+            num_ch_in = num_ch_cv if i == 0 else num_ch_outs[i - 1]
+            num_ch_out = num_ch_outs[i]
+            self.convs[f"ds_conv_{i}"] = BasicBlock(num_ch_in, num_ch_out,
+                                                    stride=1 if i == 0 else 2)
+
+            self.convs[f"conv_{i}"] = nn.Sequential(
+                BasicBlock(num_ch_enc[i], num_ch_out, stride=1),
+                BasicBlock(num_ch_out, num_ch_out, stride=1),
+            )
+            self.num_ch_enc.append(num_ch_out)
+
+    def forward(self, x):
+        outputs = []
+        for i in range(self.num_blocks):
+            x = self.convs[f"ds_conv_{i}"](x)
+
+            x = self.convs[f"conv_{i}"](x)
+            outputs.append(x)
+        return outputs
+
 class MLP(nn.Module):
     def __init__(self, channel_list, disable_final_activation = False):
         super(MLP, self).__init__()

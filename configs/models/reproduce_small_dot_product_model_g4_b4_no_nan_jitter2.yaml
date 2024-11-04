@@ -2,8 +2,8 @@
 feature_volume_type: simple_cost_volume
 cost_volume_aggregation: dot
 cv_encoder_type: multi_scale_encoder
-depth_decoder_name: unet_pp
-image_encoder_name: efficientnet
+depth_decoder_name: skip
+image_encoder_name: resnet18d
 log_interval: 100
 loss_type: log_l1
 lr: 0.0001
@@ -12,9 +12,10 @@ matching_encoder_type: resnet
 num_sanity_val_steps: 0
 precision: 16
 random_seed: 0
-name: reproduce_dot_product_model_g4_b4_no_nan_jitter3
+name: reproduce_small_dot_product_model_g4_b4_no_nan_jitter2
 batch_size: 4
 gpus: 4
 num_workers: 4
 log_dir: logs
-jitter_type: 3
+jitter_type: 2
+model_type: org

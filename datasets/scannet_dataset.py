@@ -563,7 +563,7 @@ class ScannetDataset(GenericMVSDataset):
         """
         pose_path = self.get_pose_filepath(scan_id, frame_id)
 
-        world_T_cam = np.genfromtxt(pose_path).astype(np.float32)
-        cam_T_world = np.linalg.inv(world_T_cam)
+        world_T_cam = np.genfromtxt(pose_path).astype(np.float32) #pose
+        cam_T_world = np.linalg.inv(world_T_cam) #extrinsics
 
         return world_T_cam, cam_T_world

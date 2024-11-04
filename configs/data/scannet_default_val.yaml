@@ -1,7 +1,7 @@
 !!python/object:options.Options
 dataset_path: /data/laiyan/datasets/ScanNet/extracted
-tuple_info_file_location: data_splits/ScanNetv2/standard_split/
-dataset_scan_split_file: data_splits/ScanNetv2/standard_split/scannetv2_val.txt
+tuple_info_file_location: /data/laiyan/codes/simplerecon/data_splits/ScanNetv2/standard_split/
+dataset_scan_split_file: /data/laiyan/codes/simplerecon/data_splits/ScanNetv2/standard_split/scannetv2_val.txt
 dataset: scannet
 mv_tuple_file_suffix: _eight_view_deepvmvs.txt
 num_images_in_tuple: 8

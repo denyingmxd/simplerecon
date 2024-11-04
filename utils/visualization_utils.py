@@ -224,21 +224,22 @@ def quick_viz_export_my(
                 os.path.join(output_path,
                              f"{frame_id}_gt_depth.jpg"),quality=quality
             )
+        if 'lowest_cost_bhw' in outputs.keys():
+            upsampled_cost_3hw = F.interpolate(
+                outputs["lowest_cost_bhw"][elem_ind].unsqueeze(0).unsqueeze(0),
+                size=(full_res_depth_hw3.shape[0], full_res_depth_hw3.shape[1]),
+                mode="nearest",
+            )[0]
 
-        upsampled_cost_3hw = F.interpolate(
-                                outputs["lowest_cost_bhw"][elem_ind].unsqueeze(0).unsqueeze(0),
-                                size=(full_res_depth_hw3.shape[0], full_res_depth_hw3.shape[1]),
-                                mode="nearest",
-                            )[0]
+            lowest_cost_3hw = colormap_image(
+                upsampled_cost_3hw,
+                vmin=batch_vmin, vmax=batch_vmax
+            )
+            pil_image = Image.fromarray(
+                np.uint8(lowest_cost_3hw.permute(1, 2, 0).cpu().detach().numpy() * 255)
+            )
+            pil_image.save(os.path.join(output_path, f"{frame_id}_lowest_cost_pred.jpg"), quality=quality)
 
-        lowest_cost_3hw = colormap_image(
-            upsampled_cost_3hw,
-            vmin=batch_vmin, vmax=batch_vmax
-        )
-        pil_image = Image.fromarray(
-            np.uint8(lowest_cost_3hw.permute(1, 2, 0).cpu().detach().numpy() * 255)
-        )
-        pil_image.save(os.path.join(output_path, f"{frame_id}_lowest_cost_pred.jpg"),quality=quality)
 
         depth_3hw = colormap_image(
             outputs["upampled_depth_pred_b1hw"][elem_ind],

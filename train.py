@@ -20,6 +20,8 @@
 import os
 
 os.environ["OMP_NUM_THREADS"] = "1"
+import cv2
+cv2.setNumThreads(0)
 import torch
 import pytorch_lightning as pl
 import torch.nn
@@ -29,7 +31,8 @@ from pytorch_lightning.plugins import DDPPlugin
 from torch.utils.data import DataLoader
 
 import options
-from experiment_modules.depth_model import DepthModel
+from experiment_modules import *
+
 from utils.generic_utils import copy_code_state
 from utils.dataset_utils import get_dataset
 import torchvision.transforms as transforms
@@ -40,17 +43,25 @@ def main(opts):
 
     # set seed
     pl.seed_everything(opts.random_seed) 
-    
+
+    if opts.model_type== "mono":
+        model_class = MonoDepthModel
+    elif opts.model_type == "org":
+        model_class = DepthModel
+    elif opts.model_type == "depth_anything":
+        model_class = DepthAnythingModel
+    else:
+        raise ValueError(f"Model type {opts.model_type} not recognized.")
 
     if opts.load_weights_from_checkpoint is not None:
-        model = DepthModel.load_from_checkpoint(
+        model = model_class.load_from_checkpoint(
             opts.load_weights_from_checkpoint,
             opts=opts,
             args=None
         )
     else:
         # load model using read options
-        model = DepthModel(opts)
+        model = model_class(opts)
 
 
 
@@ -177,7 +188,7 @@ if __name__ == '__main__':
     opts.val_batch_size = 2
     opts.log_interval = 2000
     # opts.max_steps=10
-    assert opts.name == option_handler.config_filepaths[0].split('/')[-1].split('.')[0]
+    assert opts.name == option_handler.config_filepaths[0].split('/')[-1].split('.yaml')[0]
     # if no GPUs are available for us then, use the 32 bit on CPU
     if opts.gpus == 0:
         print("Setting precision to 32 bits since --gpus is set to 0.")

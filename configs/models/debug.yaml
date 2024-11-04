@@ -2,8 +2,8 @@
 feature_volume_type: simple_cost_volume
 cost_volume_aggregation: dot
 cv_encoder_type: multi_scale_encoder
-depth_decoder_name: unet_pp
-image_encoder_name: efficientnet
+depth_decoder_name: skip
+image_encoder_name: resnet18d #dilated_resnet18
 log_interval: 100
 loss_type: log_l1
 lr: 0.0001
@@ -17,4 +17,6 @@ batch_size: 1
 gpus: 1
 num_workers: 1
 log_dir: logs
-jitter_type: 3
+jitter_type: 2
+model_type: mono
+num_images_in_tuple: 8

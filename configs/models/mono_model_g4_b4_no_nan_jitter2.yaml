@@ -12,8 +12,10 @@ matching_encoder_type: resnet
 num_sanity_val_steps: 0
 precision: 16
 random_seed: 0
-name: debug2
+name: mono_model_g4_b4_no_nan_jitter2
 batch_size: 4
 gpus: 4
 num_workers: 4
 log_dir: logs
+jitter_type: 2
+model_type: mono

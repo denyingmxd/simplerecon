@@ -217,7 +217,10 @@ class Options():
 
     #some of my addtionaly params
     jitter_type: int = 0
-
+    model_type: str = "org"
+    ms_only: bool = False
+    scale_type: int = 0
+    test_num_views: int = 8
 
 
 class OptionsHandler():

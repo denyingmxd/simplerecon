@@ -33,12 +33,12 @@ def create_camera_frustum(scale=1.0):
     line_set.lines = o3d.utility.Vector2iVector(lines)
     line_set.colors = o3d.utility.Vector3dVector(colors)
     return line_set
-
-rgb_path = "/data/laiyan/datasets/ScanNet/extracted/scans/scene0000_00/sensor_data/frame-000995.color.512.png"
-depth_path = "/data/laiyan/datasets/ScanNet/extracted/scans/scene0000_00/sensor_data/frame-000995.depth.256.png"
-pose_path = "/data/laiyan/datasets/ScanNet/extracted/scans/scene0000_00/sensor_data/frame-000995.pose.txt"
-mesh_path = "/data/laiyan/datasets/ScanNet/extracted/scans/scene0000_00/scene0000_00_vh_clean_2.ply"
-
+frame_id, scan = '000798', 'scene0191_00'
+rgb_path = "/data/laiyan/datasets/ScanNet/extracted/scans/{}/sensor_data/frame-{}.color.512.png".format(scan, frame_id)
+depth_path = "/data/laiyan/datasets/ScanNet/extracted/scans/{}/sensor_data/frame-{}.depth.256.png".format(scan, frame_id)
+pose_path = "/data/laiyan/datasets/ScanNet/extracted/scans/{}/sensor_data/frame-{}.pose.txt".format(scan, frame_id)
+mesh_path = "/data/laiyan/datasets/ScanNet/extracted/scans/{}/{}_vh_clean_2.ply".format(scan, scan)
+"/data/laiyan/datasets/ScanNet/extracted/scans/scene0191_00/scene0191_00_vh_clean_2.ply"
 rgb = Image.open(rgb_path)
 rgb = np.array(rgb)
 rgb_height, rgb_width = rgb.shape[:2]
@@ -77,15 +77,18 @@ data = {key: val for key, val in lines}
 # scale intrinsics to the dataset's configured depth resolution.
 K_depth[0] *= depth_width / float(data["depthWidth"])
 K_depth[1] *= depth_height / float(data["depthHeight"])
+K_rgb[0] *= rgb_width / float(data["colorWidth"])
+K_rgb[1] *= rgb_height / float(data["colorHeight"])
 render_depth_width = depth_width
 render_depth_height = depth_height
 render_rgb_width = rgb_width
 render_rgb_height = rgb_height
 
 world_T_cam_44 = world_T_cam
-K_33 = K_depth
 
-fpv_renderer = Renderer(height=render_depth_height, width=render_depth_width)
+
+fpv_depth_renderer = Renderer(height=render_depth_height, width=render_depth_width)
+fpv_rgb_renderer = Renderer(height=render_rgb_height, width=render_rgb_width)
 light_pos = world_T_cam_44.copy()
 light_pos[2, 3] += 5.0
 lights = create_light_array(
@@ -99,16 +102,16 @@ lights = create_light_array(
 mesh = trimesh.load(mesh_path,force="mesh")
 meshes = [mesh]
 
-render_fpv_depth = fpv_renderer.render_mesh(
+render_fpv_depth = fpv_depth_renderer.render_mesh(
     meshes,
     render_depth_height, render_depth_width,
-    world_T_cam_44, K_33,
+    torch.from_numpy(world_T_cam_44), K_depth,
     False,
 )
-render_fpv_color = fpv_renderer.render_mesh(
+render_fpv_color = fpv_rgb_renderer.render_mesh(
     meshes,
-    render_depth_height, render_depth_width,
-    world_T_cam_44, K_33,
+    render_rgb_height, render_rgb_width,
+    torch.from_numpy(world_T_cam_44), K_rgb,
     True,
 )
 

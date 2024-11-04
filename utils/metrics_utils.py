@@ -108,12 +108,15 @@ def compute_depth_metrics_batched(gt_bN, pred_bN, valid_masks_bN, mult_a=False):
 
     abs_diff_b = torch.nanmean(torch.abs(gt_bN - pred_bN), dim=1)
 
+    scale = torch.nanmedian(gt_bN, dim=1)[0] / torch.nanmedian(pred_bN, dim=1)[0]
+
     metrics_dict = {
                     "abs_diff": abs_diff_b,
                     "abs_rel": abs_rel_b,
                     "sq_rel": sq_rel_b,
                     "rmse": rmse_b,
                     "rmse_log": rmse_log_b,
+                    "scale": scale
                 }
     metrics_dict.update(a_dict)
 
@@ -291,3 +294,6 @@ class ResultsAverager():
             else:
                 mean_value = np.array(values).mean()
             self.final_metrics[key] = mean_value
+
+            if key == "scale":
+                self.final_metrics["scale_std"] = np.array(values).std()

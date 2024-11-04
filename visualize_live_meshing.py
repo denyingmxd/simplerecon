@@ -370,6 +370,7 @@ def main(opts):
                             
             del(dataloader)
             del(dataset)
+            # exit()
             
 if __name__ == '__main__':
     # don't need grad for test.
